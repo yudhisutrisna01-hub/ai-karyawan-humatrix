@@ -1,6 +1,6 @@
 {
   "name": "ai-karyawan-humatrix",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4"
