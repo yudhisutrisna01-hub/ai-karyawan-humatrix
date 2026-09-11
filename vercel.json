@@ -2,5 +2,10 @@
   "crons": [
     { "path": "/api/generate-ideas", "schedule": "0 23 * * *" },
     { "path": "/api/write-content", "schedule": "30 23 * * *" }
-  ]
+  ],
+  "functions": {
+    "api/generate-seo-article.js": {
+      "maxDuration": 60
+    }
+  }
 }
