@@ -1,11 +1,11 @@
-// AGENT #5 - SEO ARTICLE WRITER (v2 - metodologi Mas Didik Arwinsyah)
-// Proses 3 tahap: (1) ide dari sudut pandang masalah audiens, (2) kerangka/outline,
-// (3) kembangkan draft per section. Bukan generate 1x langsung jadi.
+// AGENT #5 - SEO ARTICLE WRITER (v3 - satu panggilan, proses 3 tahap dilakukan internal oleh AI)
+// Metodologi: search intent -> outline -> draft per section, tapi dalam 1x request
+// biar tidak kena timeout di Vercel Hobby plan.
 //
 // Cara panggil:
 //   GET /api/generate-seo-article?keyword=...&tipe=traffic
-//   tipe: "traffic" (edukasi/how-to, 700-1200 kata) | "permintaan" (interaktif, 600-900 kata)
-//         | "closingan" (sales/review, 800-1200 kata) | "pillar" (mendalam, 1500-2500+ kata)
+//   tipe: "traffic" (700-1200 kata) | "permintaan" (600-900 kata)
+//         | "closingan" (800-1200 kata) | "pillar" (1500-2200 kata, bisa lebih lama prosesnya)
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -24,47 +24,36 @@ const TIPE_CONFIG = {
   traffic: { panjang: '700-1200 kata', gaya: 'edukasi/how-to yang menarik banyak pengunjung baru, jawab pertanyaan umum secara tuntas' },
   permintaan: { panjang: '600-900 kata', gaya: 'interaktif, bahas masalah spesifik yang memancing audiens untuk bertanya/berkomentar, gunakan pertanyaan retoris dan ajakan diskusi' },
   closingan: { panjang: '800-1200 kata', gaya: 'halaman penjualan/ulasan produk yang persuasif, fokus pada manfaat konkret dan alasan membeli, CTA kuat' },
-  pillar: { panjang: '1500-2500+ kata', gaya: 'konten pilar mendalam untuk kompetisi tinggi, cakup topik secara komprehensif dari berbagai sudut' },
+  pillar: { panjang: '1500-2200 kata', gaya: 'konten pilar mendalam untuk kompetisi tinggi, cakup topik secara komprehensif dari berbagai sudut' },
 };
 
-const BASE_RULES = `Kamu AI SEO Content Writer untuk www.indonesiaorganik.id (toko online produk pertanian organik,
-termasuk Humatrix Buah - Asam Humat + Trichoderma). Kamu bekerja mengikuti kaidah penulisan SEO era AI berikut,
-WAJIB dipatuhi di semua tahap:
+const SYSTEM_PROMPT = `Kamu AI SEO Content Writer untuk www.indonesiaorganik.id (toko online produk pertanian organik,
+termasuk Humatrix Buah - Asam Humat + Trichoderma).
 
-STRUKTUR & KETERBACAAN (EEAT):
-- Heading rapi: H1 untuk judul, H2 untuk sub-topik utama, H3 untuk sub-poin di dalamnya
+PROSES BERPIKIR WAJIB (lakukan semua ini secara internal sebelum menulis, TAPI jangan tampilkan proses berpikirmu
+di output akhir kecuali di field "catatan_proses"):
+1. Analisa search intent: masalah/pertanyaan apa yang sebenarnya dicari audiens dari keyword ini di Google?
+   Sudut pandang unik apa yang bisa diambil supaya tidak generik seperti artikel SEO kebanyakan?
+2. Susun kerangka (outline) H1/H2/H3 berdasarkan search intent tadi.
+3. Kembangkan outline itu jadi artikel lengkap, section by section.
+
+KAIDAH PENULISAN (EEAT) — WAJIB DIPATUHI:
+- Heading rapi: H1 judul, H2 sub-topik utama, H3 sub-poin
 - Paragraf PENDEK, maksimal 3-4 kalimat per paragraf
-- Tebalkan (gunakan **teks**) kalimat-kalimat kunci yang mengandung insight penting, supaya mudah di-skim
+- Tebalkan (gunakan **teks**) kalimat-kalimat kunci berisi insight penting, agar mudah di-skim
 - Sisipkan keyword secara natural, JANGAN keyword stuffing
+- Di minimal 1-2 tempat yang relevan, sisipkan penanda: [CATATAN UNTUK DIISI: <jenis elemen yang perlu ditambahkan
+  manusia, misal "data hasil panen dari petani binaan", "testimoni pelanggan">]. JANGAN mengarang data/testimoni palsu.
+- Sisipkan produk Humatrix Buah sebagai solusi di 1-2 tempat relevan (boleh lebih persuasif kalau tipe "closingan")
+- Tutup dengan CTA singkat ke www.indonesiaorganik.id
 
-INJEKSI NILAI TAMBAH (ANTI-AI GENERIK):
-- Di minimal 1-2 tempat yang relevan, sisipkan penanda jelas untuk elemen yang HARUS diisi manusia nanti,
-  jangan mengarang data palsu. Format penanda: [CATATAN UNTUK DIISI: <jenis elemen yang perlu ditambahkan, misal
-  "data hasil panen dari petani binaan", "testimoni pelanggan", "foto/video pendukung">]
-- Jangan menulis draf yang terasa generik dan template — tulis dengan suara yang punya sudut pandang jelas`;
-
-async function callClaude(messages) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      system: BASE_RULES,
-      messages,
-    }),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Claude API error: ${errText}`);
-  }
-  const data = await res.json();
-  return data.content?.[0]?.text || '';
-}
+Balas HANYA dalam format JSON object, tanpa teks pembuka/penutup, tanpa markdown code fence:
+{
+  "catatan_proses": "ringkasan singkat 2-3 kalimat: search intent yang kamu identifikasi + sudut pandang yang dipakai",
+  "judul": "judul artikel (H1)",
+  "meta_description": "meta description maks 155 karakter, mengandung keyword",
+  "isi_artikel": "isi lengkap artikel dalam format markdown dengan ## dan ### untuk heading, dan ** untuk bold"
+}`;
 
 module.exports = async (req, res) => {
   try {
@@ -73,52 +62,37 @@ module.exports = async (req, res) => {
     const tipe = TIPE_CONFIG[req.query.tipe] ? req.query.tipe : 'traffic';
     const config = TIPE_CONFIG[tipe];
 
-    const messages = [];
-
-    // TAHAP 1 - Cari ide dari sudut pandang masalah audiens
-    messages.push({
-      role: 'user',
-      content: `Keyword target: "${keyword}". Tipe konten: ${tipe} (${config.gaya}).
-
-TAHAP 1: Sebelum menulis apapun, jelaskan dulu (dalam 3-5 kalimat, bahasa natural bukan JSON):
-- Masalah/pertanyaan APA yang sebenarnya dicari audiens saat mengetik keyword ini di Google (search intent)?
-- Sudut pandang unik apa yang bisa diambil supaya artikel ini tidak generik seperti artikel SEO kebanyakan?`,
+    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 6000,
+        system: SYSTEM_PROMPT,
+        messages: [{
+          role: 'user',
+          content: `Keyword target: "${keyword}". Tipe konten: ${tipe} (${config.gaya}). Target panjang: ${config.panjang}.`,
+        }],
+      }),
     });
-    const step1 = await callClaude(messages);
-    messages.push({ role: 'assistant', content: step1 });
 
-    // TAHAP 2 - Susun kerangka/outline
-    messages.push({
-      role: 'user',
-      content: `TAHAP 2: Berdasarkan analisa search intent tadi, susun KERANGKA artikel (outline) dengan struktur H1/H2/H3.
-Target panjang total: ${config.panjang}. Tulis outline saja dulu (list H1, H2, H3 beserta poin singkat isi tiap bagian),
-belum perlu isi lengkap.`,
-    });
-    const step2 = await callClaude(messages);
-    messages.push({ role: 'assistant', content: step2 });
+    if (!claudeRes.ok) {
+      const errText = await claudeRes.text();
+      return res.status(502).json({ error: 'Gagal memanggil Claude API', detail: errText });
+    }
 
-    // TAHAP 3 - Kembangkan draft lengkap sesuai outline
-    messages.push({
-      role: 'user',
-      content: `TAHAP 3: Sekarang kembangkan outline itu jadi artikel LENGKAP, section by section, sesuai semua kaidah EEAT
-di atas (paragraf pendek, bold kalimat kunci, sisipkan penanda [CATATAN UNTUK DIISI: ...] di tempat yang relevan).
-Sisipkan produk Humatrix Buah sebagai solusi di 1-2 tempat yang relevan (bukan hard-selling berlebihan, kecuali
-tipe kontennya "closingan" maka boleh lebih persuasif). Tutup dengan CTA singkat ke www.indonesiaorganik.id.
-
-Balas HANYA dalam format JSON object, tanpa teks pembuka/penutup, tanpa markdown code fence:
-{
-  "judul": "judul artikel (H1)",
-  "meta_description": "meta description maks 155 karakter, mengandung keyword",
-  "isi_artikel": "isi lengkap artikel dalam format markdown dengan ## dan ### untuk heading, dan ** untuk bold"
-}`,
-    });
-    const step3raw = await callClaude(messages);
+    const claudeData = await claudeRes.json();
+    const rawText = claudeData.content?.[0]?.text || '{}';
 
     let article;
     try {
-      article = JSON.parse(step3raw);
+      article = JSON.parse(rawText);
     } catch (e) {
-      return res.status(500).json({ error: 'Gagal parse output JSON dari Claude', raw: step3raw, search_intent_analysis: step1, outline: step2 });
+      return res.status(500).json({ error: 'Gagal parse output JSON dari Claude', raw: rawText });
     }
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
@@ -129,7 +103,7 @@ Balas HANYA dalam format JSON object, tanpa teks pembuka/penutup, tanpa markdown
         product: 'Humatrix Buah',
         platform: 'blog',
         idea_title: article.judul,
-        idea_detail: `Keyword: ${keyword} | Tipe: ${tipe} | Search intent: ${step1}`,
+        idea_detail: `Keyword: ${keyword} | Tipe: ${tipe} | ${article.catatan_proses || ''}`,
         caption: article.isi_artikel,
         hashtags: article.meta_description,
         status: 'written',
@@ -144,7 +118,7 @@ Balas HANYA dalam format JSON object, tanpa teks pembuka/penutup, tanpa markdown
       success: true,
       keyword_target: keyword,
       tipe_konten: tipe,
-      proses: { tahap1_search_intent: step1, tahap2_outline: step2 },
+      catatan_proses: article.catatan_proses,
       artikel: inserted[0],
     });
   } catch (err) {
