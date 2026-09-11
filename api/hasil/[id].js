@@ -1,7 +1,7 @@
 // Halaman detail 1 postingan — bisa dibuka & di-share sebagai link.
 // URL: https://<domain>/api/hasil/{id}
-// Menyertakan Open Graph tags supaya kalau link ini di-share ke Facebook,
-// muncul preview judul + cuplikan caption secara otomatis.
+// Kalau kontennya tiktok/youtube dan sudah ada video_script, tampilkan juga
+// script-nya dengan tombol copy terpisah (siap ditempel ke Google Flow/Veo).
 
 const { createClient } = require('@supabase/supabase-js');
 
@@ -36,6 +36,18 @@ module.exports = async (req, res) => {
   const excerpt = (post.caption || post.idea_detail || '').slice(0, 150);
   const fullCaption = post.caption || post.idea_detail || '';
   const platformLabel = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', youtube: 'YouTube' }[post.platform] || post.platform;
+  const hasScript = post.video_script && post.video_script.trim().length > 0;
+
+  const scriptBlock = hasScript ? `
+    <div class="bg-white rounded-2xl shadow-sm p-5 border border-slate-100 mt-4">
+      <h3 class="font-bold text-slate-800 flex items-center gap-2">🎬 Video Script</h3>
+      <p class="text-xs text-slate-400 mt-1">Siap ditempel ke Google Flow / tools text-to-video lainnya</p>
+      <div class="mt-3 bg-slate-50 rounded-lg p-3 text-sm text-slate-700 content-text">${escapeHtml(post.video_script)}</div>
+      <button onclick="copyScript()" class="mt-4 w-full bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium py-2.5 rounded-lg">
+        🎬 Copy Script Video
+      </button>
+    </div>
+  ` : '';
 
   const html = `<!DOCTYPE html>
 <html lang="id">
@@ -64,20 +76,29 @@ module.exports = async (req, res) => {
       <h2 class="text-xl font-bold text-slate-800">${escapeHtml(title)}</h2>
       <div class="mt-4 text-slate-700 content-text leading-relaxed">${escapeHtml(fullCaption)}</div>
       ${post.hashtags ? `<div class="mt-4 text-sm text-blue-600">${escapeHtml(post.hashtags)}</div>` : ''}
-      <button onclick="copyText()" class="mt-5 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2.5 rounded-lg">
-        📋 Copy untuk Posting
+      <button onclick="copyCaption()" class="mt-5 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2.5 rounded-lg">
+        📋 Copy Caption
       </button>
       <p class="text-xs text-slate-400 mt-3">Diproduksi otomatis oleh AI Karyawan — ${new Date(post.created_at).toLocaleDateString('id-ID')}</p>
     </div>
+
+    ${scriptBlock}
   </div>
 
 <script>
-  function copyText() {
+  function copyCaption() {
     const text = ${JSON.stringify(fullCaption)} + ${post.hashtags ? `"\\n\\n" + ${JSON.stringify(post.hashtags)}` : '""'};
     navigator.clipboard.writeText(text).then(() => {
-      const btn = document.querySelector('button');
+      const btn = document.querySelectorAll('button')[0];
       btn.textContent = '✓ Tersalin!';
-      setTimeout(() => btn.textContent = '📋 Copy untuk Posting', 1500);
+      setTimeout(() => btn.textContent = '📋 Copy Caption', 1500);
+    });
+  }
+  function copyScript() {
+    navigator.clipboard.writeText(${JSON.stringify(post.video_script || '')}).then(() => {
+      const btn = document.querySelectorAll('button')[1];
+      btn.textContent = '✓ Tersalin!';
+      setTimeout(() => btn.textContent = '🎬 Copy Script Video', 1500);
     });
   }
 </script>
