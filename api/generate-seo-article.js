@@ -88,9 +88,12 @@ module.exports = async (req, res) => {
     const claudeData = await claudeRes.json();
     const rawText = claudeData.content?.[0]?.text || '{}';
 
+    // Bersihkan bungkus markdown ```json ... ``` kalau ada, sebelum parse
+    const cleanedText = rawText.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+
     let article;
     try {
-      article = JSON.parse(rawText);
+      article = JSON.parse(cleanedText);
     } catch (e) {
       return res.status(500).json({ error: 'Gagal parse output JSON dari Claude', raw: rawText });
     }
